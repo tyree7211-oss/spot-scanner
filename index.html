@@ -8,135 +8,52 @@
     body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
     #wrap { max-width: 820px; margin: 0 auto; }
     button { font-size: 18px; padding: 10px 12px; margin-right: 8px; }
-    #video { width: 100%; max-height: 52vh; background:#000; border-radius: 12px; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; background:#000; }
     #result { background:#f4f4f4; border-radius:12px; padding:14px; margin-top:12px; }
     .big { font-size: 36px; font-weight: 900; }
     .sub { opacity: 0.85; margin-top: 6px; }
-    textarea { width: 100%; min-height: 160px; margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 10px; }
+    textarea { width: 100%; min-height: 170px; margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 10px; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; margin-left: 6px; }
   </style>
 </head>
 <body>
 <div id="wrap">
   <h2>Meat Dept Spot Scanner</h2>
+  <div class="sub">Scan UPC → shows <b>SPOT 1–4 + A/B</b> <span class="pill">Android Chrome</span></div>
 
-  <div>
+  <div style="margin:12px 0;">
     <button id="startBtn">Start Scan</button>
     <button id="stopBtn" disabled>Stop</button>
+    <span class="sub" id="statusText"></span>
   </div>
 
-  <video id="video" autoplay playsinline></video>
+  <div id="reader"></div>
 
   <div id="result">
     <div class="big" id="spotText">Ready</div>
-    <div class="sub" id="descText">Tap “Start Scan” and point at a barcode.</div>
+    <div class="sub" id="descText">Tap Start Scan</div>
     <div class="sub" id="upcText"></div>
-    <div class="sub" id="statusText"></div>
   </div>
 
   <h3>UPC → Spot List</h3>
-  <p class="sub">Format: UPC,SPOT,ZONE,DESCRIPTION</p>
+  <div class="sub">Format: <b>UPC,SPOT,ZONE,DESCRIPTION</b> (ZONE = A or B)</div>
   <textarea id="dbEditor">044700012345,2,B,Oscar Mayer Ham
 028000000111,1,A,Lunchables
 021130012222,3,B,Bacon</textarea>
   <button id="saveBtn">Save List</button>
 </div>
 
-<script type="module">
-  import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
+<!-- html5-qrcode library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
 
-  const video = document.getElementById("video");
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn  = document.getElementById("stopBtn");
+<script>
   const spotText = document.getElementById("spotText");
   const descText = document.getElementById("descText");
   const upcText  = document.getElementById("upcText");
   const statusText = document.getElementById("statusText");
   const dbEditor = document.getElementById("dbEditor");
   const saveBtn = document.getElementById("saveBtn");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn  = document.getElementById("stopBtn");
 
-  const DB_KEY = "meat_spot_db_v1";
-  dbEditor.value = localStorage.getItem(DB_KEY) || dbEditor.value;
-
-  let dbMap = new Map();
-  function parseDb(text) {
-    const m = new Map();
-    text.split(/\r?\n/).forEach(line => {
-      const clean = line.trim();
-      if (!clean || clean.startsWith("#")) return;
-      const parts = clean.split(",");
-      const upc = (parts[0] || "").replace(/\D/g, "");
-      const spot = (parts[1] || "").trim();
-      const zone = (parts[2] || "").trim().toUpperCase();
-      const desc = parts.slice(3).join(",").trim();
-      if (upc) m.set(upc, { spot, zone, desc });
-    });
-    return m;
-  }
-  function loadDb() { dbMap = parseDb(dbEditor.value); }
-  loadDb();
-
-  saveBtn.onclick = () => {
-    localStorage.setItem(DB_KEY, dbEditor.value.trim());
-    loadDb();
-    statusText.textContent = "Saved list on this phone.";
-  };
-
-  function showHit(upc) {
-    const hit = dbMap.get(upc);
-    if (hit && hit.spot && hit.zone) {
-      spotText.textContent = `SPOT ${hit.spot}${hit.zone}`;
-      descText.textContent = hit.desc || "Saved item";
-      upcText.textContent = `UPC: ${upc}`;
-    } else {
-      spotText.textContent = "NOT FOUND";
-      descText.textContent = "Add this UPC in the list.";
-      upcText.textContent = `UPC: ${upc}`;
-    }
-  }
-
-  const reader = new BrowserMultiFormatReader();
-  let controls = null;
-  let last = "";
-  let lastAt = 0;
-
-  startBtn.onclick = async () => {
-    try {
-      statusText.textContent = "Starting camera…";
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-
-      controls = await reader.decodeFromVideoDevice(
-        null, // default camera (usually back camera on phones)
-        video,
-        (result, err) => {
-          if (result) {
-            const raw = String(result.getText() || "");
-            const upc = raw.replace(/\D/g, "");
-            const now = Date.now();
-            if (upc && (upc !== last || now - lastAt > 1200)) {
-              last = upc; lastAt = now;
-              showHit(upc);
-              statusText.textContent = "Scanning…";
-            }
-          }
-        }
-      );
-
-      statusText.textContent = "Scanning… point at barcode.";
-    } catch (e) {
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      statusText.textContent = "Camera/scanner error: " + (e?.message || e);
-    }
-  };
-
-  stopBtn.onclick = () => {
-    try { controls?.stop(); } catch {}
-    controls = null;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    statusText.textContent = "Stopped.";
-  };
-</script>
-</body>
-</html>
+  const DB_KEY = "m_
