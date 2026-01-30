@@ -1,67 +1,142 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Meat Spot Scanner</title>
-<style>
-body{font-family:Arial;margin:15px}
-#video{width:100%;max-height:50vh;background:#000;border-radius:12px}
-.big{font-size:36px;font-weight:bold;margin-top:10px}
-textarea{width:100%;height:150px;margin-top:10px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Meat Dept Spot Scanner</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
+    #wrap { max-width: 820px; margin: 0 auto; }
+    button { font-size: 18px; padding: 10px 12px; margin-right: 8px; }
+    #video { width: 100%; max-height: 52vh; background:#000; border-radius: 12px; }
+    #result { background:#f4f4f4; border-radius:12px; padding:14px; margin-top:12px; }
+    .big { font-size: 36px; font-weight: 900; }
+    .sub { opacity: 0.85; margin-top: 6px; }
+    textarea { width: 100%; min-height: 160px; margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 10px; }
+  </style>
 </head>
 <body>
+<div id="wrap">
+  <h2>Meat Dept Spot Scanner</h2>
 
-<h2>Meat Dept Spot Scanner</h2>
-<button onclick="startScan()">Start Camera Scan</button>
-<video id="video" autoplay playsinline></video>
+  <div>
+    <button id="startBtn">Start Scan</button>
+    <button id="stopBtn" disabled>Stop</button>
+  </div>
 
-<div class="big" id="spotText">Scan a UPC</div>
-<div id="descText"></div>
-<div id="upcText"></div>
+  <video id="video" autoplay playsinline></video>
 
-<h3>Product List</h3>
-<textarea id="db">
-044700012345,2,B,Oscar Mayer Ham
+  <div id="result">
+    <div class="big" id="spotText">Ready</div>
+    <div class="sub" id="descText">Tap “Start Scan” and point at a barcode.</div>
+    <div class="sub" id="upcText"></div>
+    <div class="sub" id="statusText"></div>
+  </div>
+
+  <h3>UPC → Spot List</h3>
+  <p class="sub">Format: UPC,SPOT,ZONE,DESCRIPTION</p>
+  <textarea id="dbEditor">044700012345,2,B,Oscar Mayer Ham
 028000000111,1,A,Lunchables
-021130012222,3,B,Bacon
-</textarea>
+021130012222,3,B,Bacon</textarea>
+  <button id="saveBtn">Save List</button>
+</div>
 
-<script>
-let db=new Map()
-function loadDB(){
-db.clear()
-document.getElementById("db").value.split("\n").forEach(l=>{
-let p=l.split(",")
-if(p.length>=3)db.set(p[0].trim(),{spot:p[1],zone:p[2],desc:p[3]})
-})
-}
-loadDB()
+<script type="module">
+  import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
 
-function showHit(u){
-let h=db.get(u)
-if(h){
-spotText.innerText="SPOT "+h.spot+h.zone
-descText.innerText=h.desc
-upcText.innerText="UPC: "+u
-}else{
-spotText.innerText="NOT FOUND"
-descText.innerText="Add it below"
-upcText.innerText="UPC: "+u
-}
-}
+  const video = document.getElementById("video");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn  = document.getElementById("stopBtn");
+  const spotText = document.getElementById("spotText");
+  const descText = document.getElementById("descText");
+  const upcText  = document.getElementById("upcText");
+  const statusText = document.getElementById("statusText");
+  const dbEditor = document.getElementById("dbEditor");
+  const saveBtn = document.getElementById("saveBtn");
 
-async function startScan(){
-if(!("BarcodeDetector" in window)){alert("Use Chrome on Android");return}
-let d=new BarcodeDetector({formats:["upc_a","ean_13"]})
-let s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
-video.srcObject=s
-requestAnimationFrame(async function scan(){
-let c=await d.detect(video)
-if(c.length){showHit(c[0].rawValue.replace(/\D/g,""))}
-requestAnimationFrame(scan)
-})
-}
+  const DB_KEY = "meat_spot_db_v1";
+  dbEditor.value = localStorage.getItem(DB_KEY) || dbEditor.value;
+
+  let dbMap = new Map();
+  function parseDb(text) {
+    const m = new Map();
+    text.split(/\r?\n/).forEach(line => {
+      const clean = line.trim();
+      if (!clean || clean.startsWith("#")) return;
+      const parts = clean.split(",");
+      const upc = (parts[0] || "").replace(/\D/g, "");
+      const spot = (parts[1] || "").trim();
+      const zone = (parts[2] || "").trim().toUpperCase();
+      const desc = parts.slice(3).join(",").trim();
+      if (upc) m.set(upc, { spot, zone, desc });
+    });
+    return m;
+  }
+  function loadDb() { dbMap = parseDb(dbEditor.value); }
+  loadDb();
+
+  saveBtn.onclick = () => {
+    localStorage.setItem(DB_KEY, dbEditor.value.trim());
+    loadDb();
+    statusText.textContent = "Saved list on this phone.";
+  };
+
+  function showHit(upc) {
+    const hit = dbMap.get(upc);
+    if (hit && hit.spot && hit.zone) {
+      spotText.textContent = `SPOT ${hit.spot}${hit.zone}`;
+      descText.textContent = hit.desc || "Saved item";
+      upcText.textContent = `UPC: ${upc}`;
+    } else {
+      spotText.textContent = "NOT FOUND";
+      descText.textContent = "Add this UPC in the list.";
+      upcText.textContent = `UPC: ${upc}`;
+    }
+  }
+
+  const reader = new BrowserMultiFormatReader();
+  let controls = null;
+  let last = "";
+  let lastAt = 0;
+
+  startBtn.onclick = async () => {
+    try {
+      statusText.textContent = "Starting camera…";
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      controls = await reader.decodeFromVideoDevice(
+        null, // default camera (usually back camera on phones)
+        video,
+        (result, err) => {
+          if (result) {
+            const raw = String(result.getText() || "");
+            const upc = raw.replace(/\D/g, "");
+            const now = Date.now();
+            if (upc && (upc !== last || now - lastAt > 1200)) {
+              last = upc; lastAt = now;
+              showHit(upc);
+              statusText.textContent = "Scanning…";
+            }
+          }
+        }
+      );
+
+      statusText.textContent = "Scanning… point at barcode.";
+    } catch (e) {
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      statusText.textContent = "Camera/scanner error: " + (e?.message || e);
+    }
+  };
+
+  stopBtn.onclick = () => {
+    try { controls?.stop(); } catch {}
+    controls = null;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    statusText.textContent = "Stopped.";
+  };
 </script>
 </body>
 </html>
