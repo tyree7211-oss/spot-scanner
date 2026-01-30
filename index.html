@@ -1,303 +1,118 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Meat Dept Spot Scanner</title>
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
-    #wrap { max-width: 920px; margin: 0 auto; }
-    button, input { font-size: 18px; padding: 10px 12px; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
-    #video { width: 100%; max-height: 52vh; background:#000; border-radius: 14px; }
-    #result { background:#f4f4f4; border-radius:14px; padding:14px; margin-top:12px; }
-    .big { font-size: 38px; font-weight: 900; letter-spacing: .4px; }
-    .sub { opacity: .85; margin-top: 6px; }
-    .status { margin-top: 10px; padding: 10px; border-radius: 12px; background:#111; color:#eee; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; }
-    textarea { width:100%; min-height: 170px; font-size: 14px; padding: 10px; border-radius: 12px; margin-top: 10px; }
-    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; }
+    body{font-family:Arial;margin:16px}
+    video{width:100%;max-height:50vh;background:#000;border-radius:12px}
+    button,select,input{font-size:18px;padding:10px}
+    .big{font-size:36px;font-weight:bold;margin-top:10px}
+    .panel{background:#f4f4f4;padding:12px;border-radius:12px;margin-top:10px}
+    .status{background:#111;color:#fff;padding:8px;border-radius:10px;margin-top:8px;font-size:13px}
   </style>
 </head>
 <body>
-<div id="wrap">
-  <h2>Meat Dept Spot Scanner</h2>
-  <div class="sub">
-    Android + Chrome. Open from the address bar (not inside another app).
-    <span class="pill">UPC / EAN</span>
-  </div>
 
-  <div class="row">
-    <button id="startBtn">Start Scan</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="switchBtn" disabled>Switch Camera</button>
-  </div>
+<h2>Meat Dept Spot Scanner</h2>
 
-  <video id="video" autoplay playsinline></video>
+<button onclick="startScan()">Start Scan</button>
+<button onclick="stopScan()">Stop</button>
 
-  <div id="result">
-    <div class="big" id="spotText">Ready</div>
-    <div class="sub" id="descText">Tap Start Scan</div>
-    <div class="sub" id="upcText"></div>
-  </div>
+<video id="video" autoplay playsinline></video>
 
-  <div class="status" id="statusText">Status: idle</div>
-
-  <h3>Manual Lookup (backup)</h3>
-  <div class="row">
-    <input id="manualUpc" inputmode="numeric" placeholder="Type UPC digits" />
-    <button id="manualBtn">Lookup</button>
-  </div>
-
-  <h3>UPC → Spot List</h3>
-  <div class="sub">One per line: <b>UPC,SPOT,ZONE,DESCRIPTION</b> (ZONE = A or B)</div>
-  <textarea id="dbEditor"># examples:
-044700012345,2,B,Oscar Mayer Ham
-028000000111,1,A,Lunchables
-021130012222,3,B,Bacon</textarea>
-
-  <div class="row">
-    <button id="saveBtn">Save List</button>
-    <button id="resetBtn">Reset Sample</button>
-  </div>
+<div class="panel">
+  <div class="big" id="spotText">Ready</div>
+  <div id="descText"></div>
+  <div id="upcText"></div>
 </div>
 
+<div id="assignPanel" class="panel" style="display:none;">
+  <b>Assign Location</b>
+  <div id="assignUpc"></div>
+  Spot:
+  <select id="spotSel">
+    <option>1</option><option>2</option><option>3</option><option>4</option>
+  </select>
+  Zone:
+  <select id="zoneSel">
+    <option>A</option><option>B</option>
+  </select>
+  <input id="descInput" placeholder="Description"/>
+  <button onclick="saveAssign()">Save</button>
+</div>
+
+<div class="status" id="statusText">Status: idle</div>
+
 <script type="module">
-  import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
 
-  // ---------- DOM ----------
-  const video = document.getElementById("video");
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn  = document.getElementById("stopBtn");
-  const switchBtn= document.getElementById("switchBtn");
-  const statusText = document.getElementById("statusText");
-  const spotText = document.getElementById("spotText");
-  const descText = document.getElementById("descText");
-  const upcText  = document.getElementById("upcText");
+const video = document.getElementById("video");
+const spotText = document.getElementById("spotText");
+const descText = document.getElementById("descText");
+const upcText = document.getElementById("upcText");
+const assignPanel = document.getElementById("assignPanel");
+const assignUpc = document.getElementById("assignUpc");
+const statusText = document.getElementById("statusText");
 
-  const dbEditor = document.getElementById("dbEditor");
-  const saveBtn = document.getElementById("saveBtn");
-  const resetBtn = document.getElementById("resetBtn");
+let reader = new BrowserMultiFormatReader();
+let controls;
+let lastUPC="";
 
-  const manualUpc = document.getElementById("manualUpc");
-  const manualBtn = document.getElementById("manualBtn");
+const STORE_KEY="meat_spot_db";
+let db = JSON.parse(localStorage.getItem(STORE_KEY)||"{}");
 
-  function log(msg){
-    statusText.textContent = "Status: " + msg;
-  }
+function log(m){statusText.textContent="Status: "+m}
 
-  // ---------- DB ----------
-  const DEFAULT_DB = `# examples:
-044700012345,2,B,Oscar Mayer Ham
-028000000111,1,A,Lunchables
-021130012222,3,B,Bacon`.trim();
+function showFound(upc){
+  let v=db[upc];
+  spotText.textContent="SPOT "+v.spot+v.zone;
+  descText.textContent=v.desc||"";
+  upcText.textContent="UPC: "+upc;
+  assignPanel.style.display="none";
+}
 
-  const DB_KEY = "meat_spot_db_final_v1";
-  dbEditor.value = localStorage.getItem(DB_KEY) || dbEditor.value;
+function showAssign(upc){
+  spotText.textContent="NOT FOUND";
+  descText.textContent="Assign location below";
+  upcText.textContent="UPC: "+upc;
+  assignUpc.textContent="UPC: "+upc;
+  assignPanel.style.display="block";
+  lastUPC=upc;
+}
 
-  let dbMap = new Map();
-  function parseDb(text){
-    const m = new Map();
-    text.split(/\r?\n/).forEach(line=>{
-      const clean = line.trim();
-      if(!clean || clean.startsWith("#")) return;
-      const parts = clean.split(",");
-      const upc = (parts[0]||"").replace(/\D/g,"");
-      const spot = (parts[1]||"").trim();
-      const zone = (parts[2]||"").trim().toUpperCase();
-      const desc = parts.slice(3).join(",").trim();
-      if(upc) m.set(upc, { spot, zone, desc });
-    });
-    return m;
-  }
-  function loadDb(){ dbMap = parseDb(dbEditor.value); }
-  loadDb();
-
-  saveBtn.onclick = () => {
-    localStorage.setItem(DB_KEY, dbEditor.value.trim());
-    loadDb();
-    log("saved UPC list to this phone");
+window.saveAssign=function(){
+  db[lastUPC]={
+    spot:spotSel.value,
+    zone:zoneSel.value,
+    desc:descInput.value
   };
-  resetBtn.onclick = () => {
-    dbEditor.value = DEFAULT_DB;
-    localStorage.setItem(DB_KEY, dbEditor.value.trim());
-    loadDb();
-    log("reset to sample list");
-  };
+  localStorage.setItem(STORE_KEY,JSON.stringify(db));
+  showFound(lastUPC);
+  log("Saved location");
+}
 
-  function showHit(upc){
-    const hit = dbMap.get(upc);
-    if(hit && hit.spot && hit.zone){
-      spotText.textContent = `SPOT ${hit.spot}${hit.zone}`;
-      descText.textContent = hit.desc || "Saved item";
-      upcText.textContent = `UPC: ${upc}`;
-    } else {
-      spotText.textContent = "NOT FOUND";
-      descText.textContent = "Add this UPC in the list.";
-      upcText.textContent = `UPC: ${upc}`;
+window.startScan=async function(){
+  log("Starting camera...");
+  const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  video.srcObject=stream;
+
+  controls=await reader.decodeFromVideoDevice(null,video,(result)=>{
+    if(result){
+      let upc=result.getText().replace(/\D/g,"");
+      if(!upc) return;
+      if(db[upc]) showFound(upc);
+      else showAssign(upc);
+      log("Scanning...");
     }
-  }
+  });
+}
 
-  manualBtn.onclick = () => {
-    const upc = (manualUpc.value||"").replace(/\D/g,"");
-    if(!upc){ log("type a UPC first"); return; }
-    showHit(upc);
-    log("manual lookup done");
-  };
-
-  // ---------- Scanner ----------
-  const reader = new BrowserMultiFormatReader();
-  let controls = null;
-  let devices = [];
-  let deviceIndex = 0;
-
-  // Debounce duplicate scans
-  let last = "";
-  let lastAt = 0;
-
-  function cleanDigits(s){ return String(s||"").replace(/\D/g,""); }
-
-  async function getDevices(){
-    // device labels are often hidden until permission granted
-    devices = await navigator.mediaDevices.enumerateDevices();
-    devices = devices.filter(d => d.kind === "videoinput");
-    return devices;
-  }
-
-  function pickBackCameraIndex(list){
-    // Prefer "back/rear/environment" in label if available
-    const idx = list.findIndex(d => /back|rear|environment/i.test(d.label || ""));
-    return idx >= 0 ? idx : 0;
-  }
-
-  async function preflightCameraPermission(){
-    // This forces the permission prompt reliably
-    log("requesting camera permission…");
-    const tempStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
-      audio: false
-    });
-    // Immediately stop; we only needed permission + labels
-    tempStream.getTracks().forEach(t => t.stop());
-    log("camera permission granted");
-  }
-
-  async function start(){
-    try{
-      // Basic safety checks
-      if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        log("ERROR: must use HTTPS (GitHub Pages is HTTPS).");
-        return;
-      }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        log("ERROR: camera API not available in this browser.");
-        return;
-      }
-
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      switchBtn.disabled = true;
-
-      // 1) Force permission first (so camera labels appear + camera can start)
-      await preflightCameraPermission();
-
-      // 2) Get camera devices and pick best one
-      const list = await getDevices();
-      if (!list.length){
-        log("ERROR: no camera devices found");
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        return;
-      }
-      deviceIndex = pickBackCameraIndex(list);
-      switchBtn.disabled = (list.length < 2);
-
-      // 3) Start decoding from selected camera
-      const deviceId = list[deviceIndex].deviceId;
-      log(`starting scanner… (camera ${deviceIndex+1}/${list.length})`);
-
-      controls = await reader.decodeFromVideoDevice(
-        deviceId,
-        video,
-        (result) => {
-          if (!result) return;
-
-          const raw = result.getText ? result.getText() : String(result);
-          const upc = cleanDigits(raw);
-          if (!upc) return;
-
-          const now = Date.now();
-          if (upc !== last || now - lastAt > 1200) {
-            last = upc; lastAt = now;
-            showHit(upc);
-            log("scanning…");
-          }
-        }
-      );
-
-      log("scanning… point at barcode (tilt to avoid glare)");
-    } catch (e){
-      const msg = (e && e.name) ? `${e.name}: ${e.message || e}` : String(e);
-      log("ERROR: " + msg);
-
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      switchBtn.disabled = true;
-    }
-  }
-
-  async function stop(){
-    try { controls?.stop(); } catch {}
-    controls = null;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    switchBtn.disabled = false;
-    log("stopped");
-  }
-
-  async function switchCamera(){
-    try{
-      if (!devices.length) await getDevices();
-      if (devices.length < 2) return;
-
-      // stop current
-      try { controls?.stop(); } catch {}
-      controls = null;
-
-      // advance camera
-      deviceIndex = (deviceIndex + 1) % devices.length;
-      const deviceId = devices[deviceIndex].deviceId;
-      log(`switching camera… (${deviceIndex+1}/${devices.length})`);
-
-      controls = await reader.decodeFromVideoDevice(
-        deviceId,
-        video,
-        (result) => {
-          if (!result) return;
-          const upc = cleanDigits(result.getText ? result.getText() : String(result));
-          const now = Date.now();
-          if (upc && (upc !== last || now - lastAt > 1200)) {
-            last = upc; lastAt = now;
-            showHit(upc);
-            log("scanning…");
-          }
-        }
-      );
-      log("scanning…");
-    } catch (e){
-      log("ERROR switching camera: " + (e?.message || e));
-    }
-  }
-
-  startBtn.onclick = start;
-  stopBtn.onclick = stop;
-  switchBtn.onclick = switchCamera;
-
-  // Helpful hint if user opens in an in-app browser
-  // (Many in-app browsers have weird permission handling)
-  const ua = navigator.userAgent || "";
-  if (/FBAN|FBAV|Instagram|TikTok/i.test(ua)) {
-    log("TIP: Open this link directly in Chrome (not inside another app).");
-  }
+window.stopScan=function(){
+  try{controls.stop()}catch{}
+  log("Stopped");
+}
 </script>
 </body>
 </html>
