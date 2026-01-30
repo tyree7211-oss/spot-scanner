@@ -1,0 +1,9 @@
+{
+  "name": "Meat Dept Spot Scanner",
+  "short_name": "Spot Scanner",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": []
+}
