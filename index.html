@@ -1,118 +1,365 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Meat Dept Spot Scanner</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
   <style>
-    body{font-family:Arial;margin:16px}
-    video{width:100%;max-height:50vh;background:#000;border-radius:12px}
-    button,select,input{font-size:18px;padding:10px}
-    .big{font-size:36px;font-weight:bold;margin-top:10px}
-    .panel{background:#f4f4f4;padding:12px;border-radius:12px;margin-top:10px}
-    .status{background:#111;color:#fff;padding:8px;border-radius:10px;margin-top:8px;font-size:13px}
+    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
+    #wrap { max-width: 980px; margin: 0 auto; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
+    button, select, input { font-size: 18px; padding: 10px 12px; }
+    button { border: 0; border-radius: 12px; cursor: pointer; }
+    #viewport {
+      width: 100%;
+      background:#000;
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      min-height: 280px;
+    }
+    #viewport video, #viewport canvas { width: 100% !important; height: auto !important; }
+    #overlay {
+      position:absolute; inset:0; pointer-events:none;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #overlay .box {
+      width: 82%;
+      height: 38%;
+      border: 3px solid rgba(0,255,0,0.85);
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.25) inset;
+    }
+    #card { background:#f4f4f4; border-radius:14px; padding:14px; margin-top:12px; }
+    .big { font-size: 38px; font-weight: 900; letter-spacing:.4px; }
+    .sub { opacity: .85; margin-top: 6px; }
+    .status { margin-top: 10px; padding: 10px; border-radius: 12px; background:#111; color:#eee;
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+    .panel { background:#fff; border-radius: 14px; padding: 14px; margin-top: 12px; border: 1px solid #ddd; }
+    textarea { width:100%; min-height: 180px; font-size: 14px; padding: 10px; border-radius: 12px; margin-top: 10px; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; }
+    .spotbtn { font-weight: 900; padding: 12px 14px; border-radius: 12px; }
   </style>
 </head>
 <body>
+<div id="wrap">
+  <h2>Meat Dept Spot Scanner</h2>
+  <div class="sub">
+    Scan UPC → shows Spot. If new item: assign Spot + A/B and it saves.
+    <span class="pill">UPC/EAN (1D)</span>
+  </div>
 
-<h2>Meat Dept Spot Scanner</h2>
+  <div class="row">
+    <button id="startBtn">Start Scan</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="torchBtn" disabled>Toggle Light</button>
+  </div>
 
-<button onclick="startScan()">Start Scan</button>
-<button onclick="stopScan()">Stop</button>
+  <div id="viewport">
+    <div id="overlay"><div class="box"></div></div>
+  </div>
 
-<video id="video" autoplay playsinline></video>
+  <div id="card">
+    <div class="big" id="spotText">Ready</div>
+    <div class="sub" id="descText">Tap Start Scan</div>
+    <div class="sub" id="upcText"></div>
+  </div>
 
-<div class="panel">
-  <div class="big" id="spotText">Ready</div>
-  <div id="descText"></div>
-  <div id="upcText"></div>
+  <div class="status" id="statusText">Status: idle</div>
+
+  <!-- Assign panel -->
+  <div class="panel" id="assignPanel" style="display:none;">
+    <div style="font-weight:900; font-size:18px;">Assign location for scanned item</div>
+    <div class="sub" id="assignUpcLine"></div>
+
+    <div class="row">
+      <label><b>Spot</b></label>
+      <select id="spotSel">
+        <option value="1">Spot 1</option>
+        <option value="2">Spot 2</option>
+        <option value="3">Spot 3</option>
+        <option value="4">Spot 4</option>
+      </select>
+
+      <label><b>Zone</b></label>
+      <select id="zoneSel">
+        <option value="A">A (Front)</option>
+        <option value="B">B (Back)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <input id="descInput" placeholder="Description (optional)" style="flex:1; min-width:240px;">
+      <button id="saveAssignBtn">Save</button>
+      <button id="cancelAssignBtn">Cancel</button>
+    </div>
+
+    <div class="sub">Quick set:</div>
+    <div class="row" id="quickBtns"></div>
+  </div>
+
+  <details style="margin-top:14px;">
+    <summary><b>Export / Import your saved list</b></summary>
+
+    <div class="row">
+      <button id="exportBtn">Export</button>
+      <input type="file" id="importFile" accept=".txt,.csv" />
+      <button id="clearBtn">Clear All Saved</button>
+    </div>
+
+    <div class="sub">Format: UPC,SPOT,ZONE,DESCRIPTION</div>
+    <textarea id="dbView" readonly></textarea>
+  </details>
 </div>
 
-<div id="assignPanel" class="panel" style="display:none;">
-  <b>Assign Location</b>
-  <div id="assignUpc"></div>
-  Spot:
-  <select id="spotSel">
-    <option>1</option><option>2</option><option>3</option><option>4</option>
-  </select>
-  Zone:
-  <select id="zoneSel">
-    <option>A</option><option>B</option>
-  </select>
-  <input id="descInput" placeholder="Description"/>
-  <button onclick="saveAssign()">Save</button>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script>
+  // ---------- PWA service worker ----------
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  }
 
-<div class="status" id="statusText">Status: idle</div>
+  // ---------- DOM ----------
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn  = document.getElementById("stopBtn");
+  const torchBtn = document.getElementById("torchBtn");
 
-<script type="module">
-import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
+  const statusText = document.getElementById("statusText");
+  const spotText = document.getElementById("spotText");
+  const descText = document.getElementById("descText");
+  const upcText  = document.getElementById("upcText");
 
-const video = document.getElementById("video");
-const spotText = document.getElementById("spotText");
-const descText = document.getElementById("descText");
-const upcText = document.getElementById("upcText");
-const assignPanel = document.getElementById("assignPanel");
-const assignUpc = document.getElementById("assignUpc");
-const statusText = document.getElementById("statusText");
+  const assignPanel = document.getElementById("assignPanel");
+  const assignUpcLine = document.getElementById("assignUpcLine");
+  const spotSel = document.getElementById("spotSel");
+  const zoneSel = document.getElementById("zoneSel");
+  const descInput = document.getElementById("descInput");
+  const saveAssignBtn = document.getElementById("saveAssignBtn");
+  const cancelAssignBtn = document.getElementById("cancelAssignBtn");
+  const quickBtns = document.getElementById("quickBtns");
 
-let reader = new BrowserMultiFormatReader();
-let controls;
-let lastUPC="";
+  const exportBtn = document.getElementById("exportBtn");
+  const importFile = document.getElementById("importFile");
+  const clearBtn = document.getElementById("clearBtn");
+  const dbView = document.getElementById("dbView");
 
-const STORE_KEY="meat_spot_db";
-let db = JSON.parse(localStorage.getItem(STORE_KEY)||"{}");
+  const STORE_KEY = "meat_spot_db_map_v1";
 
-function log(m){statusText.textContent="Status: "+m}
+  const log = (m) => statusText.textContent = "Status: " + m;
+  const digits = (s) => String(s||"").replace(/\D/g,"");
 
-function showFound(upc){
-  let v=db[upc];
-  spotText.textContent="SPOT "+v.spot+v.zone;
-  descText.textContent=v.desc||"";
-  upcText.textContent="UPC: "+upc;
-  assignPanel.style.display="none";
-}
+  // ---------- Storage (UPC -> {spot,zone,desc}) ----------
+  function loadStore(){
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; }
+    catch { return {}; }
+  }
+  function saveStore(obj){
+    localStorage.setItem(STORE_KEY, JSON.stringify(obj));
+  }
+  let store = loadStore();
 
-function showAssign(upc){
-  spotText.textContent="NOT FOUND";
-  descText.textContent="Assign location below";
-  upcText.textContent="UPC: "+upc;
-  assignUpc.textContent="UPC: "+upc;
-  assignPanel.style.display="block";
-  lastUPC=upc;
-}
+  // Optional starter examples (only if empty)
+  if (Object.keys(store).length === 0) {
+    store = {
+      "028000000111": { spot:"1", zone:"A", desc:"Lunchables" },
+      "021130012222": { spot:"3", zone:"B", desc:"Bacon" }
+    };
+    saveStore(store);
+  }
 
-window.saveAssign=function(){
-  db[lastUPC]={
-    spot:spotSel.value,
-    zone:zoneSel.value,
-    desc:descInput.value
+  function refreshDbView(){
+    const lines = Object.entries(store)
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([upc,v]) => `${upc},${v.spot},${v.zone},${v.desc||""}`.trimEnd());
+    dbView.value = lines.join("\n");
+  }
+  refreshDbView();
+
+  // ---------- UI ----------
+  let lastScanned = "";
+
+  function showFound(upc, v){
+    spotText.textContent = `SPOT ${v.spot}${v.zone}`;
+    descText.textContent = v.desc || "Saved item";
+    upcText.textContent  = `UPC: ${upc}`;
+    assignPanel.style.display = "none";
+  }
+
+  function showNotFound(upc){
+    spotText.textContent = "NOT FOUND";
+    descText.textContent = "Assign Spot + Zone below.";
+    upcText.textContent  = `UPC: ${upc}`;
+    assignUpcLine.textContent = `Scanned UPC: ${upc}`;
+    descInput.value = "";
+    assignPanel.style.display = "block";
+    lastScanned = upc;
+    log("UPC not found — assign location");
+  }
+
+  function lookup(upc){
+    const v = store[upc];
+    if (v) showFound(upc, v);
+    else showNotFound(upc);
+  }
+
+  // Quick buttons 1A..4B
+  (function buildQuick(){
+    const combos = [];
+    for (const s of ["1","2","3","4"]) for (const z of ["A","B"]) combos.push([s,z]);
+    quickBtns.innerHTML = "";
+    combos.forEach(([s,z]) => {
+      const b = document.createElement("button");
+      b.className = "spotbtn";
+      b.textContent = `${s}${z}`;
+      b.onclick = () => { spotSel.value = s; zoneSel.value = z; };
+      quickBtns.appendChild(b);
+    });
+  })();
+
+  saveAssignBtn.onclick = () => {
+    if (!lastScanned) { log("Scan first"); return; }
+    store[lastScanned] = { spot: spotSel.value, zone: zoneSel.value, desc: descInput.value.trim() };
+    saveStore(store);
+    refreshDbView();
+    showFound(lastScanned, store[lastScanned]);
+    log(`Saved ${lastScanned} → SPOT ${spotSel.value}${zoneSel.value}`);
   };
-  localStorage.setItem(STORE_KEY,JSON.stringify(db));
-  showFound(lastUPC);
-  log("Saved location");
-}
 
-window.startScan=async function(){
-  log("Starting camera...");
-  const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-  video.srcObject=stream;
+  cancelAssignBtn.onclick = () => { assignPanel.style.display = "none"; log("assignment canceled"); };
 
-  controls=await reader.decodeFromVideoDevice(null,video,(result)=>{
-    if(result){
-      let upc=result.getText().replace(/\D/g,"");
-      if(!upc) return;
-      if(db[upc]) showFound(upc);
-      else showAssign(upc);
-      log("Scanning...");
-    }
+  exportBtn.onclick = () => {
+    const text = dbView.value || "";
+    const blob = new Blob([text], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "meat_spots_export.txt";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    log("exported");
+  };
+
+  importFile.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    text.split(/\r?\n/).forEach(line => {
+      const clean = line.trim();
+      if (!clean || clean.startsWith("#")) return;
+      const parts = clean.split(",");
+      const upc = digits(parts[0]);
+      const spot = (parts[1]||"").trim();
+      const zone = (parts[2]||"").trim().toUpperCase();
+      const desc = parts.slice(3).join(",").trim();
+      if (upc && spot && zone) store[upc] = { spot, zone, desc };
+    });
+    saveStore(store);
+    refreshDbView();
+    log("imported");
   });
-}
 
-window.stopScan=function(){
-  try{controls.stop()}catch{}
-  log("Stopped");
-}
+  clearBtn.onclick = () => {
+    store = {};
+    saveStore(store);
+    refreshDbView();
+    log("cleared all saved");
+  };
+
+  // ---------- Scanner (Quagga2) ----------
+  let running = false;
+  let last = "";
+  let lastAt = 0;
+  let torchOn = false;
+
+  async function tryEnableTorch(){
+    // Torch only works if browser exposes it. We'll enable button if possible.
+    try {
+      const track = Quagga.CameraAccess.getActiveTrack();
+      if (!track) return;
+      const caps = track.getCapabilities && track.getCapabilities();
+      torchBtn.disabled = !(caps && caps.torch);
+    } catch {}
+  }
+
+  async function toggleTorch(){
+    try {
+      const track = Quagga.CameraAccess.getActiveTrack();
+      if (!track) return;
+      const caps = track.getCapabilities && track.getCapabilities();
+      if (!(caps && caps.torch)) { log("torch not supported"); return; }
+      torchOn = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+      log(torchOn ? "torch on" : "torch off");
+    } catch (e) {
+      log("torch error");
+    }
+  }
+
+  torchBtn.onclick = toggleTorch;
+
+  function startScan(){
+    log("Starting camera… allow permission if asked");
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector("#viewport"),
+        constraints: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height:{ ideal: 720 }
+        },
+        // Focus scan on center strip where barcode should be
+        area: { top: "35%", right: "10%", left: "10%", bottom: "35%" }
+      },
+      locator: { patchSize: "medium", halfSample: true },
+      numOfWorkers: 2,
+      frequency: 10,
+      decoder: { readers: ["upc_reader", "upc_e_reader", "ean_reader"] },
+      locate: true
+    }, function(err){
+      if (err) {
+        log("ERROR: " + err);
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        return;
+      }
+      Quagga.start();
+      running = true;
+      log("Scanning… aim barcode in green box (tilt to reduce glare)");
+      setTimeout(tryEnableTorch, 500);
+    });
+
+    Quagga.onDetected(function(res){
+      const code = digits(res?.codeResult?.code);
+      const now = Date.now();
+      if (!code) return;
+      if (code !== last || now - lastAt > 1200) {
+        last = code; lastAt = now;
+        lookup(code);
+      }
+    });
+  }
+
+  function stopScan(){
+    try { Quagga.stop(); } catch {}
+    running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    torchBtn.disabled = true;
+    log("Stopped");
+  }
+
+  startBtn.onclick = () => { if (!running) startScan(); };
+  stopBtn.onclick = stopScan;
+
 </script>
 </body>
 </html>
