@@ -1,121 +1,45 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Meat Dept Spot Scanner</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#111111">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Meat Dept Spot Scanner (Photo)</title>
 
   <style>
-    :root { --bg:#111; --panel:#f4f4f4; --ok:#00ff66; --muted:#777; }
     body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
     #wrap { max-width: 980px; margin: 0 auto; }
-    h2 { margin: 0 0 6px; }
     .sub { opacity:.85; margin-top: 6px; }
-    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#e8e8e8; }
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
-
-    button, select, input {
-      font-size: 18px;
-      padding: 10px 12px;
-      border-radius: 12px;
-    }
+    button, select, input { font-size: 18px; padding: 10px 12px; border-radius: 12px; }
     button { border:0; cursor:pointer; }
-    button:disabled { opacity:.5; cursor:not-allowed; }
-
-    #viewport {
-      width: 100%;
-      background: #000;
-      border-radius: 14px;
-      overflow: hidden;
-      position: relative;
-      min-height: 280px;
-    }
-    #viewport video, #viewport canvas { width: 100% !important; height: auto !important; }
-
-    #overlay {
-      position:absolute; inset:0;
-      pointer-events:none;
-      display:flex; align-items:center; justify-content:center;
-    }
-    #overlay .box {
-      width: 82%;
-      height: 38%;
-      border: 3px solid rgba(0,255,102,.85);
-      border-radius: 10px;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,.25) inset;
-    }
-
-    #card {
-      background: var(--panel);
-      border-radius: 14px;
-      padding: 14px;
-      margin-top: 12px;
-    }
-    .big { font-size: 38px; font-weight: 900; letter-spacing: .4px; }
-    .muted { color: var(--muted); }
-
-    .status {
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 12px;
-      background: var(--bg);
-      color: #eee;
-      font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
-    }
-
-    .panel {
-      background: #fff;
-      border-radius: 14px;
-      padding: 14px;
-      margin-top: 12px;
-      border: 1px solid #ddd;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 170px;
-      font-size: 14px;
-      padding: 10px;
-      border-radius: 12px;
-      margin-top: 10px;
-      font-family: ui-monospace, Menlo, Consolas, monospace;
-    }
-
-    details { margin-top: 14px; }
-    .spotbtn { font-weight: 900; padding: 12px 14px; border-radius: 12px; }
-    .danger { background:#ffdada; }
-    .ok { color: #0a0; font-weight: 700; }
+    .panel { background:#f4f4f4; border-radius:14px; padding:14px; margin-top:12px; }
+    .big { font-size: 38px; font-weight: 900; }
+    .status { margin-top:10px; padding:10px; border-radius:12px; background:#111; color:#eee;
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
+    #preview { width:100%; max-height: 40vh; object-fit: contain; border-radius: 14px; background:#000; display:none; }
+    .assign { background:#fff; border-radius:14px; padding:14px; border:1px solid #ddd; margin-top:12px; display:none; }
+    .spotbtn { font-weight:900; padding: 12px 14px; border-radius: 12px; }
+    textarea { width:100%; min-height: 170px; font-size: 14px; padding: 10px; border-radius: 12px; margin-top: 10px; }
   </style>
 </head>
 <body>
 <div id="wrap">
-  <h2>Meat Dept Spot Scanner</h2>
+  <h2>Meat Dept Spot Scanner (Take Photo)</h2>
   <div class="sub">
-    Scan UPC → shows saved Spot. If new item: assign Spot + A/B and save.
-    <span class="pill">UPC / EAN</span>
-    <span class="pill">Offline-capable</span>
+    Tap <b>Take Barcode Photo</b> → it scans from the picture → then you assign Spot + A/B and save.
   </div>
 
   <div class="row">
-    <button id="startBtn">Start Scan</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="torchBtn" disabled>Light</button>
+    <button id="takeBtn">Take Barcode Photo</button>
+    <button id="clearBtn">Clear Preview</button>
+    <input id="fileInput" type="file" accept="image/*" capture="environment" style="display:none;">
   </div>
 
-  <div id="viewport">
-    <div id="overlay"><div class="box"></div></div>
-  </div>
+  <img id="preview" alt="preview"/>
 
-  <div id="card">
+  <div class="panel">
     <div class="big" id="spotText">Ready</div>
-    <div class="sub" id="descText">Tap Start Scan</div>
+    <div class="sub" id="descText">Take a photo of the barcode</div>
     <div class="sub" id="upcText"></div>
   </div>
 
@@ -124,14 +48,13 @@
   <div class="panel">
     <b>Manual lookup (backup)</b>
     <div class="row">
-      <input id="manualUpc" inputmode="numeric" placeholder="Type UPC digits" />
+      <input id="manualUpc" inputmode="numeric" placeholder="Type UPC digits"/>
       <button id="manualBtn">Lookup</button>
     </div>
-    <div class="sub muted">Use this if a shiny package won’t scan.</div>
+    <div class="sub">If photo scan fails, type the UPC and save it once.</div>
   </div>
 
-  <!-- Assign Panel -->
-  <div class="panel" id="assignPanel" style="display:none;">
+  <div class="assign" id="assignPanel">
     <div style="font-weight:900; font-size:18px;">Assign location for scanned item</div>
     <div class="sub" id="assignUpcLine"></div>
 
@@ -161,45 +84,38 @@
     <div class="row" id="quickBtns"></div>
   </div>
 
-  <details>
+  <details style="margin-top:14px;">
     <summary><b>Export / Import saved list</b></summary>
-    <div class="sub muted">Export your UPC map so you can back it up or move to another phone.</div>
-
     <div class="row">
       <button id="exportBtn">Export</button>
-      <input type="file" id="importFile" accept=".txt,.csv" />
-      <button id="clearBtn" class="danger">Clear All Saved</button>
+      <input type="file" id="importFile" accept=".txt,.csv"/>
+      <button id="clearAllBtn">Clear All Saved</button>
     </div>
-
     <div class="sub">Format: UPC,SPOT,ZONE,DESCRIPTION</div>
     <textarea id="dbView" readonly></textarea>
   </details>
+
+  <!-- Hidden canvas for decoding -->
+  <canvas id="canvas" style="display:none;"></canvas>
 </div>
 
-<!-- Quagga2: best fit for 1D UPC/EAN scanning in-browser -->
-<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script type="module">
+  import {
+    BrowserMultiFormatReader,
+    BarcodeFormat,
+    DecodeHintType
+  } from "https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/+esm";
 
-<script>
-  // -------------------------
-  // PWA service worker
-  // -------------------------
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
-    });
-  }
-
-  // -------------------------
-  // DOM
-  // -------------------------
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn  = document.getElementById("stopBtn");
-  const torchBtn = document.getElementById("torchBtn");
-  const statusText = document.getElementById("statusText");
+  // ---------- DOM ----------
+  const takeBtn = document.getElementById("takeBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const fileInput = document.getElementById("fileInput");
+  const preview = document.getElementById("preview");
 
   const spotText = document.getElementById("spotText");
   const descText = document.getElementById("descText");
-  const upcText  = document.getElementById("upcText");
+  const upcText = document.getElementById("upcText");
+  const statusText = document.getElementById("statusText");
 
   const manualUpc = document.getElementById("manualUpc");
   const manualBtn = document.getElementById("manualBtn");
@@ -215,42 +131,27 @@
 
   const exportBtn = document.getElementById("exportBtn");
   const importFile = document.getElementById("importFile");
-  const clearBtn = document.getElementById("clearBtn");
+  const clearAllBtn = document.getElementById("clearAllBtn");
   const dbView = document.getElementById("dbView");
 
-  // -------------------------
-  // Helpers
-  // -------------------------
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
   const log = (m) => statusText.textContent = "Status: " + m;
-  const digits = (s) => String(s || "").replace(/\D/g, "");
+  const digits = (s) => String(s||"").replace(/\D/g,"");
 
-  function mustBeHttps() {
-    // GitHub Pages is HTTPS. This protects camera access.
-    return (location.protocol === "https:" || location.hostname === "localhost");
+  // ---------- Storage ----------
+  const STORE_KEY = "meat_spot_db_photo_v1";
+
+  function loadStore(){
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; }
+    catch { return {}; }
   }
-
-  // -------------------------
-  // Storage
-  // -------------------------
-  const STORE_KEY = "meat_spot_db_v1";
-
-  function loadStore() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      const obj = raw ? JSON.parse(raw) : {};
-      return (obj && typeof obj === "object") ? obj : {};
-    } catch {
-      return {};
-    }
-  }
-
-  function saveStore(obj) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(obj));
-  }
+  function saveStore(obj){ localStorage.setItem(STORE_KEY, JSON.stringify(obj)); }
 
   let store = loadStore();
 
-  // Optional starter data if empty (remove if you want)
+  // Optional starter examples
   if (Object.keys(store).length === 0) {
     store = {
       "028000000111": { spot:"1", zone:"A", desc:"Lunchables" },
@@ -259,27 +160,25 @@
     saveStore(store);
   }
 
-  function refreshDbView() {
+  function refreshDbView(){
     const lines = Object.entries(store)
-      .sort((a,b) => a[0].localeCompare(b[0]))
-      .map(([upc,v]) => `${upc},${v.spot},${v.zone},${v.desc || ""}`.trimEnd());
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([upc,v]) => `${upc},${v.spot},${v.zone},${v.desc||""}`.trimEnd());
     dbView.value = lines.join("\n");
   }
   refreshDbView();
 
-  // -------------------------
-  // Lookup + Assign
-  // -------------------------
+  // ---------- UI ----------
   let lastScannedUPC = "";
 
-  function showFound(upc, v) {
+  function showFound(upc, v){
     spotText.textContent = `SPOT ${v.spot}${v.zone}`;
-    descText.innerHTML = v.desc ? `<span class="ok">${v.desc}</span>` : "Saved item";
+    descText.textContent = v.desc || "Saved item";
     upcText.textContent  = `UPC: ${upc}`;
     assignPanel.style.display = "none";
   }
 
-  function showNotFound(upc) {
+  function showNotFound(upc){
     spotText.textContent = "NOT FOUND";
     descText.textContent = "Assign Spot + Zone below.";
     upcText.textContent  = `UPC: ${upc}`;
@@ -290,21 +189,14 @@
     assignPanel.style.display = "block";
   }
 
-  function lookup(upc) {
+  function lookup(upc){
     const v = store[upc];
     if (v) showFound(upc, v);
     else showNotFound(upc);
   }
 
-  manualBtn.onclick = () => {
-    const upc = digits(manualUpc.value);
-    if (!upc) { log("Type a UPC first"); return; }
-    lookup(upc);
-    log("Manual lookup done");
-  };
-
-  // Quick buttons 1A..4B
-  (function buildQuickButtons() {
+  // Quick buttons
+  (function buildQuick(){
     quickBtns.innerHTML = "";
     for (const s of ["1","2","3","4"]) {
       for (const z of ["A","B"]) {
@@ -336,10 +228,17 @@
     log("Assignment canceled");
   };
 
-  // Export / Import / Clear
+  manualBtn.onclick = () => {
+    const upc = digits(manualUpc.value);
+    if (!upc) { log("Type a UPC first"); return; }
+    lookup(upc);
+    log("Manual lookup done");
+  };
+
+  // Export/Import/Clear
   exportBtn.onclick = () => {
     const text = dbView.value || "";
-    const blob = new Blob([text], { type: "text/plain" });
+    const blob = new Blob([text], { type:"text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "meat_spots_export.txt";
@@ -351,7 +250,6 @@
   importFile.addEventListener("change", async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-
     const text = await file.text();
     let updated = 0;
 
@@ -360,13 +258,10 @@
       if (!clean || clean.startsWith("#")) return;
       const parts = clean.split(",");
       const upc = digits(parts[0]);
-      const spot = (parts[1] || "").trim();
-      const zone = (parts[2] || "").trim().toUpperCase();
+      const spot = (parts[1]||"").trim();
+      const zone = (parts[2]||"").trim().toUpperCase();
       const desc = parts.slice(3).join(",").trim();
-      if (upc && spot && zone) {
-        store[upc] = { spot, zone, desc };
-        updated++;
-      }
+      if (upc && spot && zone) { store[upc] = { spot, zone, desc }; updated++; }
     });
 
     saveStore(store);
@@ -375,7 +270,7 @@
     importFile.value = "";
   });
 
-  clearBtn.onclick = () => {
+  clearAllBtn.onclick = () => {
     if (!confirm("Clear ALL saved UPC locations on this phone?")) return;
     store = {};
     saveStore(store);
@@ -383,129 +278,90 @@
     log("Cleared all saved");
   };
 
-  // -------------------------
-  // Scanner (Quagga2)
-  // -------------------------
-  let running = false;
-  let torchOn = false;
+  // ---------- Photo decode (ZXing) ----------
+  // Restrict formats for speed + accuracy
+  const hints = new Map();
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.UPC_A,
+    BarcodeFormat.UPC_E,
+    BarcodeFormat.EAN_13,
+    BarcodeFormat.EAN_8
+  ]);
 
-  // Debounce repeated detections
-  let last = "";
-  let lastAt = 0;
+  const reader = new BrowserMultiFormatReader(hints, 200);
 
-  function setButtons({start, stop, torch}) {
-    startBtn.disabled = !start;
-    stopBtn.disabled  = !stop;
-    torchBtn.disabled = !torch;
+  async function decodeFromImage(img) {
+    // Draw the image onto a canvas and decode from the canvas element
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+
+    // Scale down huge photos for speed (and sometimes better decode)
+    const maxW = 1600;
+    const scale = Math.min(1, maxW / w);
+    canvas.width = Math.floor(w * scale);
+    canvas.height = Math.floor(h * scale);
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Convert canvas to an <img> url and use decodeFromImageUrl
+    // (ZXing works well this way on mobile)
+    const dataUrl = canvas.toDataURL("image/png");
+
+    const result = await reader.decodeFromImageUrl(dataUrl);
+    const raw = result.getText ? result.getText() : String(result);
+    return digits(raw);
   }
 
-  async function updateTorchButton() {
-    try {
-      const track = Quagga.CameraAccess.getActiveTrack();
-      if (!track) { setButtons({start:false, stop:true, torch:false}); return; }
-      const caps = track.getCapabilities && track.getCapabilities();
-      torchBtn.disabled = !(caps && caps.torch);
-    } catch {
-      torchBtn.disabled = true;
-    }
+  function resetPreview() {
+    preview.style.display = "none";
+    preview.src = "";
+    log("idle");
   }
 
-  async function toggleTorch() {
-    try {
-      const track = Quagga.CameraAccess.getActiveTrack();
-      if (!track) return;
-      const caps = track.getCapabilities && track.getCapabilities();
-      if (!(caps && caps.torch)) { log("Light not supported on this device"); return; }
-      torchOn = !torchOn;
-      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
-      log(torchOn ? "Light ON" : "Light OFF");
-    } catch {
-      log("Light toggle failed");
-    }
-  }
-  torchBtn.onclick = toggleTorch;
+  // ---------- Take Photo Flow ----------
+  takeBtn.onclick = () => fileInput.click();
 
-  const onDetectedHandler = (res) => {
-    const code = digits(res?.codeResult?.code);
-    if (!code) return;
+  clearBtn.onclick = () => resetPreview();
 
-    const now = Date.now();
-    if (code !== last || now - lastAt > 1200) {
-      last = code;
-      lastAt = now;
-      lookup(code);
-    }
-  };
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
 
-  function startScan() {
-    if (running) return;
-
-    if (!mustBeHttps()) {
-      log("ERROR: Camera requires HTTPS. Use GitHub Pages link.");
-      return;
-    }
-
+    // Show preview
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    preview.style.display = "block";
     assignPanel.style.display = "none";
-    setButtons({start:false, stop:true, torch:false});
-    log("Starting camera… allow permission if asked");
 
-    Quagga.init({
-      inputStream: {
-        type: "LiveStream",
-        target: document.querySelector("#viewport"),
-        constraints: {
-          facingMode: "environment",
-          width:  { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        // Center scan strip (helps on shelves)
-        area: { top: "35%", right: "10%", left: "10%", bottom: "35%" }
-      },
-      locator: { patchSize: "medium", halfSample: true },
-      numOfWorkers: 2,
-      frequency: 10,
-      decoder: { readers: ["upc_reader","upc_e_reader","ean_reader"] },
-      locate: true
-    }, (err) => {
-      if (err) {
-        running = false;
-        setButtons({start:true, stop:false, torch:false});
-        log("ERROR starting scanner:\n" + String(err));
-        return;
+    log("Decoding barcode from photo…");
+
+    try {
+      await new Promise((resolve, reject) => {
+        preview.onload = resolve;
+        preview.onerror = reject;
+      });
+
+      const upc = await decodeFromImage(preview);
+
+      if (!upc) {
+        spotText.textContent = "NO BARCODE";
+        descText.textContent = "Could not detect a UPC/EAN in this photo. Try closer + brighter light.";
+        upcText.textContent = "";
+        log("No barcode found. Tips: fill frame with barcode, avoid glare, steady shot.");
+      } else {
+        lookup(upc);
+        log("Decoded from photo");
       }
-
-      // Avoid duplicate handlers (common bug)
-      try { Quagga.offDetected(onDetectedHandler); } catch {}
-      Quagga.onDetected(onDetectedHandler);
-
-      Quagga.start();
-      running = true;
-      log("Scanning… aim barcode in green box (tilt to reduce glare)");
-
-      setTimeout(updateTorchButton, 600);
-    });
-  }
-
-  function stopScan() {
-    if (!running) return;
-
-    try { Quagga.offDetected(onDetectedHandler); } catch {}
-    try { Quagga.stop(); } catch {}
-
-    running = false;
-    torchOn = false;
-    setButtons({start:true, stop:false, torch:false});
-    log("Stopped");
-  }
-
-  startBtn.onclick = startScan;
-  stopBtn.onclick = stopScan;
-
-  // In-app browser warning
-  const ua = navigator.userAgent || "";
-  if (/FBAN|FBAV|Instagram|TikTok/i.test(ua)) {
-    log("TIP: Open this link directly in Chrome (not inside another app).");
-  }
+    } catch (e) {
+      spotText.textContent = "SCAN FAILED";
+      descText.textContent = "Try again (brighter light, closer, less glare).";
+      upcText.textContent = "";
+      log("Decode error: " + (e?.message || e));
+    } finally {
+      URL.revokeObjectURL(url);
+      fileInput.value = "";
+    }
+  });
 </script>
 </body>
 </html>
