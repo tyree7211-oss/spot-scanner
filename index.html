@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meat Spot Scanner</title>
+<style>
+body{font-family:Arial;margin:15px}
+#video{width:100%;max-height:50vh;background:#000;border-radius:12px}
+.big{font-size:36px;font-weight:bold;margin-top:10px}
+textarea{width:100%;height:150px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<h2>Meat Dept Spot Scanner</h2>
+<button onclick="startScan()">Start Camera Scan</button>
+<video id="video" autoplay playsinline></video>
+
+<div class="big" id="spotText">Scan a UPC</div>
+<div id="descText"></div>
+<div id="upcText"></div>
+
+<h3>Product List</h3>
+<textarea id="db">
+044700012345,2,B,Oscar Mayer Ham
+028000000111,1,A,Lunchables
+021130012222,3,B,Bacon
+</textarea>
+
+<script>
+let db=new Map()
+function loadDB(){
+db.clear()
+document.getElementById("db").value.split("\n").forEach(l=>{
+let p=l.split(",")
+if(p.length>=3)db.set(p[0].trim(),{spot:p[1],zone:p[2],desc:p[3]})
+})
+}
+loadDB()
+
+function showHit(u){
+let h=db.get(u)
+if(h){
+spotText.innerText="SPOT "+h.spot+h.zone
+descText.innerText=h.desc
+upcText.innerText="UPC: "+u
+}else{
+spotText.innerText="NOT FOUND"
+descText.innerText="Add it below"
+upcText.innerText="UPC: "+u
+}
+}
+
+async function startScan(){
+if(!("BarcodeDetector" in window)){alert("Use Chrome on Android");return}
+let d=new BarcodeDetector({formats:["upc_a","ean_13"]})
+let s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
+video.srcObject=s
+requestAnimationFrame(async function scan(){
+let c=await d.detect(video)
+if(c.length){showHit(c[0].rawValue.replace(/\D/g,""))}
+requestAnimationFrame(scan)
+})
+}
+</script>
+</body>
+</html>
