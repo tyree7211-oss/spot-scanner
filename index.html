@@ -3,31 +3,59 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Meat Dept Spot Scanner</title>
+  <title>Meat Dept Spot Scanner (UPC)</title>
   <style>
     body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
-    #wrap { max-width: 820px; margin: 0 auto; }
-    button { font-size: 18px; padding: 10px 12px; margin-right: 8px; }
-    #reader { width: 100%; border-radius: 12px; overflow: hidden; background:#000; }
-    #result { background:#f4f4f4; border-radius:12px; padding:14px; margin-top:12px; }
-    .big { font-size: 36px; font-weight: 900; }
+    #wrap { max-width: 900px; margin: 0 auto; }
+    button, input { font-size: 18px; padding: 10px 12px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
+    #viewport {
+      width: 100%;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      min-height: 280px;
+    }
+    #viewport video, #viewport canvas { width: 100% !important; height: auto !important; }
+    #overlay {
+      position:absolute; inset:0;
+      pointer-events:none;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #overlay .box {
+      width: 78%;
+      height: 35%;
+      border: 3px solid rgba(0,255,0,0.85);
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.25) inset;
+    }
+    #result {
+      background:#f4f4f4; border-radius:14px; padding:14px; margin-top:12px;
+    }
+    .big { font-size: 38px; font-weight: 900; letter-spacing: 0.4px; }
     .sub { opacity: 0.85; margin-top: 6px; }
-    textarea { width: 100%; min-height: 170px; margin-top: 10px; font-size: 14px; padding: 10px; border-radius: 10px; }
-    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; margin-left: 6px; }
+    textarea { width:100%; min-height: 170px; font-size: 14px; padding: 10px; border-radius: 12px; margin-top: 10px; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; }
   </style>
 </head>
 <body>
 <div id="wrap">
-  <h2>Meat Dept Spot Scanner</h2>
-  <div class="sub">Scan UPC → shows <b>SPOT 1–4 + A/B</b> <span class="pill">Android Chrome</span></div>
+  <h2>Meat Dept Spot Scanner (UPC)</h2>
+  <div class="sub">
+    Works best on <b>Android + Chrome</b>. Aim barcode inside the green box. Avoid glare (tilt slightly).
+    <span class="pill">UPC-A / EAN-13</span>
+  </div>
 
-  <div style="margin:12px 0;">
+  <div class="row">
     <button id="startBtn">Start Scan</button>
     <button id="stopBtn" disabled>Stop</button>
     <span class="sub" id="statusText"></span>
   </div>
 
-  <div id="reader"></div>
+  <div id="viewport">
+    <div id="overlay"><div class="box"></div></div>
+  </div>
 
   <div id="result">
     <div class="big" id="spotText">Ready</div>
@@ -35,25 +63,159 @@
     <div class="sub" id="upcText"></div>
   </div>
 
-  <h3>UPC → Spot List</h3>
+  <h3>Manual entry (backup)</h3>
+  <div class="row">
+    <input id="manualUpc" inputmode="numeric" placeholder="Type UPC digits" />
+    <button id="manualBtn">Lookup</button>
+  </div>
+
+  <h3>UPC → Spot list</h3>
   <div class="sub">Format: <b>UPC,SPOT,ZONE,DESCRIPTION</b> (ZONE = A or B)</div>
-  <textarea id="dbEditor">044700012345,2,B,Oscar Mayer Ham
+  <textarea id="dbEditor"># examples:
+044700012345,2,B,Oscar Mayer Ham
 028000000111,1,A,Lunchables
 021130012222,3,B,Bacon</textarea>
-  <button id="saveBtn">Save List</button>
+  <div class="row">
+    <button id="saveBtn">Save List</button>
+    <button id="resetBtn">Reset Sample</button>
+  </div>
 </div>
 
-<!-- html5-qrcode library -->
-<script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
 
 <script>
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const statusText = document.getElementById("statusText");
   const spotText = document.getElementById("spotText");
   const descText = document.getElementById("descText");
-  const upcText  = document.getElementById("upcText");
-  const statusText = document.getElementById("statusText");
+  const upcText = document.getElementById("upcText");
   const dbEditor = document.getElementById("dbEditor");
   const saveBtn = document.getElementById("saveBtn");
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn  = document.getElementById("stopBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const manualUpc = document.getElementById("manualUpc");
+  const manualBtn = document.getElementById("manualBtn");
 
-  const DB_KEY = "m_
+  const DEFAULT_DB = `# examples:
+044700012345,2,B,Oscar Mayer Ham
+028000000111,1,A,Lunchables
+021130012222,3,B,Bacon`.trim();
+
+  const DB_KEY = "meat_spot_db_quagga_v1";
+  dbEditor.value = localStorage.getItem(DB_KEY) || dbEditor.value;
+
+  function parseDb(text){
+    const map = new Map();
+    text.split(/\r?\n/).forEach(line=>{
+      const clean = line.trim();
+      if(!clean || clean.startsWith("#")) return;
+      const parts = clean.split(",");
+      const upc = (parts[0]||"").replace(/\D/g,"");
+      const spot = (parts[1]||"").trim();
+      const zone = (parts[2]||"").trim().toUpperCase();
+      const desc = parts.slice(3).join(",").trim();
+      if(upc) map.set(upc,{spot,zone,desc});
+    });
+    return map;
+  }
+  let dbMap = parseDb(dbEditor.value);
+
+  function saveDb(){
+    localStorage.setItem(DB_KEY, dbEditor.value.trim());
+    dbMap = parseDb(dbEditor.value);
+    statusText.textContent = "Saved list on this phone.";
+  }
+
+  saveBtn.onclick = saveDb;
+  resetBtn.onclick = () => {
+    dbEditor.value = DEFAULT_DB;
+    saveDb();
+  };
+
+  function showHit(upc){
+    const hit = dbMap.get(upc);
+    if(hit && hit.spot && hit.zone){
+      spotText.textContent = `SPOT ${hit.spot}${hit.zone}`;
+      descText.textContent = hit.desc || "Saved item";
+      upcText.textContent = `UPC: ${upc}`;
+    } else {
+      spotText.textContent = "NOT FOUND";
+      descText.textContent = "Add this UPC in the list.";
+      upcText.textContent = `UPC: ${upc}`;
+    }
+  }
+
+  manualBtn.onclick = () => {
+    const upc = (manualUpc.value||"").replace(/\D/g,"");
+    if(!upc){ statusText.textContent = "Type a UPC first."; return; }
+    showHit(upc);
+  };
+
+  let running = false;
+  let last = "";
+  let lastAt = 0;
+
+  function startScan(){
+    statusText.textContent = "Starting camera… (allow permission)";
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector("#viewport"),
+        constraints: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height:{ ideal: 720 }
+        },
+        area: { top: "35%", right: "10%", left: "10%", bottom: "35%" } // scan strip
+      },
+      locator: { patchSize: "medium", halfSample: true },
+      numOfWorkers: 2,
+      frequency: 10,
+      decoder: {
+        readers: [
+          "upc_reader",
+          "upc_e_reader",
+          "ean_reader"
+        ]
+      },
+      locate: true
+    }, function(err){
+      if(err){
+        statusText.textContent = "Camera/scanner error: " + err;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        return;
+      }
+      Quagga.start();
+      running = true;
+      statusText.textContent = "Scanning… aim barcode in green box (tilt to reduce glare).";
+    });
+
+    Quagga.onDetected(function(result){
+      if(!result || !result.codeResult || !result.codeResult.code) return;
+      const code = String(result.codeResult.code).replace(/\D/g,"");
+      const now = Date.now();
+
+      // Debounce repeats
+      if(code && (code !== last || now - lastAt > 1200)){
+        last = code; lastAt = now;
+        showHit(code);
+      }
+    });
+  }
+
+  function stopScan(){
+    try { Quagga.stop(); } catch(e) {}
+    running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    statusText.textContent = "Stopped.";
+  }
+
+  startBtn.onclick = () => {
+    if(running) return;
+    startScan();
+  };
