@@ -11,54 +11,102 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
 
   <style>
+    :root { --bg:#111; --panel:#f4f4f4; --ok:#00ff66; --muted:#777; }
     body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
     #wrap { max-width: 980px; margin: 0 auto; }
+    h2 { margin: 0 0 6px; }
+    .sub { opacity:.85; margin-top: 6px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#e8e8e8; }
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
-    button, select, input { font-size: 18px; padding: 10px 12px; }
-    button { border: 0; border-radius: 12px; cursor: pointer; }
+
+    button, select, input {
+      font-size: 18px;
+      padding: 10px 12px;
+      border-radius: 12px;
+    }
+    button { border:0; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+
     #viewport {
       width: 100%;
-      background:#000;
+      background: #000;
       border-radius: 14px;
       overflow: hidden;
       position: relative;
       min-height: 280px;
     }
     #viewport video, #viewport canvas { width: 100% !important; height: auto !important; }
+
     #overlay {
-      position:absolute; inset:0; pointer-events:none;
+      position:absolute; inset:0;
+      pointer-events:none;
       display:flex; align-items:center; justify-content:center;
     }
     #overlay .box {
       width: 82%;
       height: 38%;
-      border: 3px solid rgba(0,255,0,0.85);
+      border: 3px solid rgba(0,255,102,.85);
       border-radius: 10px;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.25) inset;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,.25) inset;
     }
-    #card { background:#f4f4f4; border-radius:14px; padding:14px; margin-top:12px; }
-    .big { font-size: 38px; font-weight: 900; letter-spacing:.4px; }
-    .sub { opacity: .85; margin-top: 6px; }
-    .status { margin-top: 10px; padding: 10px; border-radius: 12px; background:#111; color:#eee;
-      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
-    .panel { background:#fff; border-radius: 14px; padding: 14px; margin-top: 12px; border: 1px solid #ddd; }
-    textarea { width:100%; min-height: 180px; font-size: 14px; padding: 10px; border-radius: 12px; margin-top: 10px; }
-    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#e8e8e8; }
+
+    #card {
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+    .big { font-size: 38px; font-weight: 900; letter-spacing: .4px; }
+    .muted { color: var(--muted); }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 12px;
+      background: var(--bg);
+      color: #eee;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px;
+      margin-top: 12px;
+      border: 1px solid #ddd;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 170px;
+      font-size: 14px;
+      padding: 10px;
+      border-radius: 12px;
+      margin-top: 10px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    details { margin-top: 14px; }
     .spotbtn { font-weight: 900; padding: 12px 14px; border-radius: 12px; }
+    .danger { background:#ffdada; }
+    .ok { color: #0a0; font-weight: 700; }
   </style>
 </head>
 <body>
 <div id="wrap">
   <h2>Meat Dept Spot Scanner</h2>
   <div class="sub">
-    Scan UPC → shows Spot. If new item: assign Spot + A/B and it saves.
-    <span class="pill">UPC/EAN (1D)</span>
+    Scan UPC → shows saved Spot. If new item: assign Spot + A/B and save.
+    <span class="pill">UPC / EAN</span>
+    <span class="pill">Offline-capable</span>
   </div>
 
   <div class="row">
     <button id="startBtn">Start Scan</button>
     <button id="stopBtn" disabled>Stop</button>
-    <button id="torchBtn" disabled>Toggle Light</button>
+    <button id="torchBtn" disabled>Light</button>
   </div>
 
   <div id="viewport">
@@ -73,7 +121,16 @@
 
   <div class="status" id="statusText">Status: idle</div>
 
-  <!-- Assign panel -->
+  <div class="panel">
+    <b>Manual lookup (backup)</b>
+    <div class="row">
+      <input id="manualUpc" inputmode="numeric" placeholder="Type UPC digits" />
+      <button id="manualBtn">Lookup</button>
+    </div>
+    <div class="sub muted">Use this if a shiny package won’t scan.</div>
+  </div>
+
+  <!-- Assign Panel -->
   <div class="panel" id="assignPanel" style="display:none;">
     <div style="font-weight:900; font-size:18px;">Assign location for scanned item</div>
     <div class="sub" id="assignUpcLine"></div>
@@ -104,13 +161,14 @@
     <div class="row" id="quickBtns"></div>
   </div>
 
-  <details style="margin-top:14px;">
-    <summary><b>Export / Import your saved list</b></summary>
+  <details>
+    <summary><b>Export / Import saved list</b></summary>
+    <div class="sub muted">Export your UPC map so you can back it up or move to another phone.</div>
 
     <div class="row">
       <button id="exportBtn">Export</button>
       <input type="file" id="importFile" accept=".txt,.csv" />
-      <button id="clearBtn">Clear All Saved</button>
+      <button id="clearBtn" class="danger">Clear All Saved</button>
     </div>
 
     <div class="sub">Format: UPC,SPOT,ZONE,DESCRIPTION</div>
@@ -118,22 +176,33 @@
   </details>
 </div>
 
+<!-- Quagga2: best fit for 1D UPC/EAN scanning in-browser -->
 <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+
 <script>
-  // ---------- PWA service worker ----------
+  // -------------------------
+  // PWA service worker
+  // -------------------------
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
   }
 
-  // ---------- DOM ----------
+  // -------------------------
+  // DOM
+  // -------------------------
   const startBtn = document.getElementById("startBtn");
   const stopBtn  = document.getElementById("stopBtn");
   const torchBtn = document.getElementById("torchBtn");
-
   const statusText = document.getElementById("statusText");
+
   const spotText = document.getElementById("spotText");
   const descText = document.getElementById("descText");
   const upcText  = document.getElementById("upcText");
+
+  const manualUpc = document.getElementById("manualUpc");
+  const manualBtn = document.getElementById("manualBtn");
 
   const assignPanel = document.getElementById("assignPanel");
   const assignUpcLine = document.getElementById("assignUpcLine");
@@ -149,22 +218,39 @@
   const clearBtn = document.getElementById("clearBtn");
   const dbView = document.getElementById("dbView");
 
-  const STORE_KEY = "meat_spot_db_map_v1";
-
+  // -------------------------
+  // Helpers
+  // -------------------------
   const log = (m) => statusText.textContent = "Status: " + m;
-  const digits = (s) => String(s||"").replace(/\D/g,"");
+  const digits = (s) => String(s || "").replace(/\D/g, "");
 
-  // ---------- Storage (UPC -> {spot,zone,desc}) ----------
-  function loadStore(){
-    try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; }
-    catch { return {}; }
+  function mustBeHttps() {
+    // GitHub Pages is HTTPS. This protects camera access.
+    return (location.protocol === "https:" || location.hostname === "localhost");
   }
-  function saveStore(obj){
+
+  // -------------------------
+  // Storage
+  // -------------------------
+  const STORE_KEY = "meat_spot_db_v1";
+
+  function loadStore() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === "object") ? obj : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveStore(obj) {
     localStorage.setItem(STORE_KEY, JSON.stringify(obj));
   }
+
   let store = loadStore();
 
-  // Optional starter examples (only if empty)
+  // Optional starter data if empty (remove if you want)
   if (Object.keys(store).length === 0) {
     store = {
       "028000000111": { spot:"1", zone:"A", desc:"Lunchables" },
@@ -173,66 +259,84 @@
     saveStore(store);
   }
 
-  function refreshDbView(){
+  function refreshDbView() {
     const lines = Object.entries(store)
-      .sort((a,b)=>a[0].localeCompare(b[0]))
-      .map(([upc,v]) => `${upc},${v.spot},${v.zone},${v.desc||""}`.trimEnd());
+      .sort((a,b) => a[0].localeCompare(b[0]))
+      .map(([upc,v]) => `${upc},${v.spot},${v.zone},${v.desc || ""}`.trimEnd());
     dbView.value = lines.join("\n");
   }
   refreshDbView();
 
-  // ---------- UI ----------
-  let lastScanned = "";
+  // -------------------------
+  // Lookup + Assign
+  // -------------------------
+  let lastScannedUPC = "";
 
-  function showFound(upc, v){
+  function showFound(upc, v) {
     spotText.textContent = `SPOT ${v.spot}${v.zone}`;
-    descText.textContent = v.desc || "Saved item";
+    descText.innerHTML = v.desc ? `<span class="ok">${v.desc}</span>` : "Saved item";
     upcText.textContent  = `UPC: ${upc}`;
     assignPanel.style.display = "none";
   }
 
-  function showNotFound(upc){
+  function showNotFound(upc) {
     spotText.textContent = "NOT FOUND";
     descText.textContent = "Assign Spot + Zone below.";
     upcText.textContent  = `UPC: ${upc}`;
+
+    lastScannedUPC = upc;
     assignUpcLine.textContent = `Scanned UPC: ${upc}`;
     descInput.value = "";
     assignPanel.style.display = "block";
-    lastScanned = upc;
-    log("UPC not found — assign location");
   }
 
-  function lookup(upc){
+  function lookup(upc) {
     const v = store[upc];
     if (v) showFound(upc, v);
     else showNotFound(upc);
   }
 
+  manualBtn.onclick = () => {
+    const upc = digits(manualUpc.value);
+    if (!upc) { log("Type a UPC first"); return; }
+    lookup(upc);
+    log("Manual lookup done");
+  };
+
   // Quick buttons 1A..4B
-  (function buildQuick(){
-    const combos = [];
-    for (const s of ["1","2","3","4"]) for (const z of ["A","B"]) combos.push([s,z]);
+  (function buildQuickButtons() {
     quickBtns.innerHTML = "";
-    combos.forEach(([s,z]) => {
-      const b = document.createElement("button");
-      b.className = "spotbtn";
-      b.textContent = `${s}${z}`;
-      b.onclick = () => { spotSel.value = s; zoneSel.value = z; };
-      quickBtns.appendChild(b);
-    });
+    for (const s of ["1","2","3","4"]) {
+      for (const z of ["A","B"]) {
+        const b = document.createElement("button");
+        b.className = "spotbtn";
+        b.type = "button";
+        b.textContent = `${s}${z}`;
+        b.onclick = () => { spotSel.value = s; zoneSel.value = z; };
+        quickBtns.appendChild(b);
+      }
+    }
   })();
 
   saveAssignBtn.onclick = () => {
-    if (!lastScanned) { log("Scan first"); return; }
-    store[lastScanned] = { spot: spotSel.value, zone: zoneSel.value, desc: descInput.value.trim() };
+    if (!lastScannedUPC) { log("Scan an item first"); return; }
+    store[lastScannedUPC] = {
+      spot: spotSel.value,
+      zone: zoneSel.value,
+      desc: descInput.value.trim()
+    };
     saveStore(store);
     refreshDbView();
-    showFound(lastScanned, store[lastScanned]);
-    log(`Saved ${lastScanned} → SPOT ${spotSel.value}${zoneSel.value}`);
+    showFound(lastScannedUPC, store[lastScannedUPC]);
+    log(`Saved ${lastScannedUPC} -> SPOT ${spotSel.value}${zoneSel.value}`);
   };
 
-  cancelAssignBtn.onclick = () => { assignPanel.style.display = "none"; log("assignment canceled"); };
+  cancelAssignBtn.onclick = () => {
+    assignPanel.style.display = "none";
+    log("Assignment canceled");
+  };
 
+  // Export / Import / Clear
   exportBtn.onclick = () => {
     const text = dbView.value || "";
     const blob = new Blob([text], { type: "text/plain" });
@@ -241,71 +345,109 @@
     a.download = "meat_spots_export.txt";
     a.click();
     URL.revokeObjectURL(a.href);
-    log("exported");
+    log("Exported");
   };
 
   importFile.addEventListener("change", async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+
     const text = await file.text();
+    let updated = 0;
+
     text.split(/\r?\n/).forEach(line => {
       const clean = line.trim();
       if (!clean || clean.startsWith("#")) return;
       const parts = clean.split(",");
       const upc = digits(parts[0]);
-      const spot = (parts[1]||"").trim();
-      const zone = (parts[2]||"").trim().toUpperCase();
+      const spot = (parts[1] || "").trim();
+      const zone = (parts[2] || "").trim().toUpperCase();
       const desc = parts.slice(3).join(",").trim();
-      if (upc && spot && zone) store[upc] = { spot, zone, desc };
+      if (upc && spot && zone) {
+        store[upc] = { spot, zone, desc };
+        updated++;
+      }
     });
+
     saveStore(store);
     refreshDbView();
-    log("imported");
+    log(`Imported (${updated} updated)`);
+    importFile.value = "";
   });
 
   clearBtn.onclick = () => {
+    if (!confirm("Clear ALL saved UPC locations on this phone?")) return;
     store = {};
     saveStore(store);
     refreshDbView();
-    log("cleared all saved");
+    log("Cleared all saved");
   };
 
-  // ---------- Scanner (Quagga2) ----------
+  // -------------------------
+  // Scanner (Quagga2)
+  // -------------------------
   let running = false;
-  let last = "";
-  let lastAt = 0;
   let torchOn = false;
 
-  async function tryEnableTorch(){
-    // Torch only works if browser exposes it. We'll enable button if possible.
-    try {
-      const track = Quagga.CameraAccess.getActiveTrack();
-      if (!track) return;
-      const caps = track.getCapabilities && track.getCapabilities();
-      torchBtn.disabled = !(caps && caps.torch);
-    } catch {}
+  // Debounce repeated detections
+  let last = "";
+  let lastAt = 0;
+
+  function setButtons({start, stop, torch}) {
+    startBtn.disabled = !start;
+    stopBtn.disabled  = !stop;
+    torchBtn.disabled = !torch;
   }
 
-  async function toggleTorch(){
+  async function updateTorchButton() {
     try {
       const track = Quagga.CameraAccess.getActiveTrack();
-      if (!track) return;
+      if (!track) { setButtons({start:false, stop:true, torch:false}); return; }
       const caps = track.getCapabilities && track.getCapabilities();
-      if (!(caps && caps.torch)) { log("torch not supported"); return; }
-      torchOn = !torchOn;
-      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
-      log(torchOn ? "torch on" : "torch off");
-    } catch (e) {
-      log("torch error");
+      torchBtn.disabled = !(caps && caps.torch);
+    } catch {
+      torchBtn.disabled = true;
     }
   }
 
+  async function toggleTorch() {
+    try {
+      const track = Quagga.CameraAccess.getActiveTrack();
+      if (!track) return;
+      const caps = track.getCapabilities && track.getCapabilities();
+      if (!(caps && caps.torch)) { log("Light not supported on this device"); return; }
+      torchOn = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+      log(torchOn ? "Light ON" : "Light OFF");
+    } catch {
+      log("Light toggle failed");
+    }
+  }
   torchBtn.onclick = toggleTorch;
 
-  function startScan(){
+  const onDetectedHandler = (res) => {
+    const code = digits(res?.codeResult?.code);
+    if (!code) return;
+
+    const now = Date.now();
+    if (code !== last || now - lastAt > 1200) {
+      last = code;
+      lastAt = now;
+      lookup(code);
+    }
+  };
+
+  function startScan() {
+    if (running) return;
+
+    if (!mustBeHttps()) {
+      log("ERROR: Camera requires HTTPS. Use GitHub Pages link.");
+      return;
+    }
+
+    assignPanel.style.display = "none";
+    setButtons({start:false, stop:true, torch:false});
     log("Starting camera… allow permission if asked");
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
 
     Quagga.init({
       inputStream: {
@@ -313,53 +455,57 @@
         target: document.querySelector("#viewport"),
         constraints: {
           facingMode: "environment",
-          width: { ideal: 1280 },
-          height:{ ideal: 720 }
+          width:  { ideal: 1280 },
+          height: { ideal: 720 }
         },
-        // Focus scan on center strip where barcode should be
+        // Center scan strip (helps on shelves)
         area: { top: "35%", right: "10%", left: "10%", bottom: "35%" }
       },
       locator: { patchSize: "medium", halfSample: true },
       numOfWorkers: 2,
       frequency: 10,
-      decoder: { readers: ["upc_reader", "upc_e_reader", "ean_reader"] },
+      decoder: { readers: ["upc_reader","upc_e_reader","ean_reader"] },
       locate: true
-    }, function(err){
+    }, (err) => {
       if (err) {
-        log("ERROR: " + err);
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
+        running = false;
+        setButtons({start:true, stop:false, torch:false});
+        log("ERROR starting scanner:\n" + String(err));
         return;
       }
+
+      // Avoid duplicate handlers (common bug)
+      try { Quagga.offDetected(onDetectedHandler); } catch {}
+      Quagga.onDetected(onDetectedHandler);
+
       Quagga.start();
       running = true;
       log("Scanning… aim barcode in green box (tilt to reduce glare)");
-      setTimeout(tryEnableTorch, 500);
-    });
 
-    Quagga.onDetected(function(res){
-      const code = digits(res?.codeResult?.code);
-      const now = Date.now();
-      if (!code) return;
-      if (code !== last || now - lastAt > 1200) {
-        last = code; lastAt = now;
-        lookup(code);
-      }
+      setTimeout(updateTorchButton, 600);
     });
   }
 
-  function stopScan(){
+  function stopScan() {
+    if (!running) return;
+
+    try { Quagga.offDetected(onDetectedHandler); } catch {}
     try { Quagga.stop(); } catch {}
+
     running = false;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    torchBtn.disabled = true;
+    torchOn = false;
+    setButtons({start:true, stop:false, torch:false});
     log("Stopped");
   }
 
-  startBtn.onclick = () => { if (!running) startScan(); };
+  startBtn.onclick = startScan;
   stopBtn.onclick = stopScan;
 
+  // In-app browser warning
+  const ua = navigator.userAgent || "";
+  if (/FBAN|FBAV|Instagram|TikTok/i.test(ua)) {
+    log("TIP: Open this link directly in Chrome (not inside another app).");
+  }
 </script>
 </body>
 </html>
